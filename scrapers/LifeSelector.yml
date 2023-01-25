@@ -1,0 +1,39 @@
+name: "LifeSelector / 21Roles"
+sceneByURL:
+  - action: script
+    url:
+      - lifeselector.com/game/DisplayPlayer/gameId/
+    script:
+      - python
+      - LifeSelector.py
+      - lifeselector
+sceneByFragment:
+    action: script
+    script:
+      - python
+      - LifeSelector.py
+      - lifeselector
+sceneByName:
+    action: script
+    script:
+      - python
+      - LifeSelector.py
+      - lifeselector
+      - searchName
+sceneByQueryFragment:
+    action: script
+    script:
+      - python
+      - LifeSelector.py
+      - lifeselector
+      - validName
+galleryByURL:
+  - action: script
+    url:
+      - lifeselector.com/pov-photo-gallery/
+    script:
+      - python
+      - LifeSelector.py
+      - lifeselector
+      - gallery
+# Last Updated January 25, 2023
