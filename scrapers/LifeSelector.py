@@ -231,14 +231,6 @@ def api_search_req(type_search, query, url):
         elif "map" in api_request_json:
             api_search = [api_request_json["map"]]
         if api_search:
-            # TODO: add each "scene" of the game
-            log.debug("api_search:")
-            for item in api_search:
-                log.debug(item)
-            # determine scenes from HTML page
-
-
-            # TODO: add each "scene"
             return api_search
     return None
 
@@ -791,11 +783,11 @@ if "movie" not in sys.argv and "gallery" not in sys.argv:
     url_domain = None
     scraped = None
     game_description = None
-    scraped = scrape_game_html(SCENE_URL, HEADERS)
-    log.debug(f"scraped: {scraped}")
     if SCENE_URL:
         url_id = get_id_from_url(SCENE_URL)
         try:
+            scraped = scrape_game_html(SCENE_URL, HEADERS)
+            log.debug(f"scraped: {scraped}")
             game_title = scraped["title"]
             log.info(f"game_title: {game_title}")
             game_description = scraped["description"]
@@ -834,11 +826,18 @@ if "movie" not in sys.argv and "gallery" not in sys.argv:
                 scraped_json = parse_scene_json(scene)
                 if scraped_json.get("tags"):
                     scraped_json.pop("tags")
-                if game_description:
-                    scraped_json["description"] = game_description
                 id = scene["id"]
                 scraped_json["url"] = f"https://lifeselector.com/game/DisplayPlayer/gameId/{id}"
-                result_search.append(scraped_json)
+                if game_description:
+                    scraped_json["description"] = game_description
+                # scrape game page for scenes
+                scraped = scrape_game_html(scraped_json["url"], HEADERS)
+                for scraped_scene in scraped["scenes"]:
+                    scene_plus = scraped_json.copy()
+                    if game_description:
+                        scene_plus["description"] = game_description
+                    scene_plus["image"] = scraped_scene["image"]
+                    result_search.append(scene_plus)
             if result_search:
                 final_json = result_search
         if final_json is None:
@@ -860,10 +859,15 @@ if "movie" not in sys.argv and "gallery" not in sys.argv:
         if api_search:
             log.info(f"[API] Search gives {len(api_search)} result(s)")
             log.debug(f"api_search: {api_search}")
-            if game_description:
-                for search_item in api_search:
-                    search_item["description"] = game_description
-            api_json = json_parser(api_search)
+            searched_and_scraped = []            
+            for search_item in api_search:
+                for scene in scraped["scenes"]:
+                    search_item_plus = search_item.copy()
+                    if game_description:
+                        search_item_plus["description"] = game_description
+                    search_item_plus["image"] = scene["image"]
+                    searched_and_scraped.append(search_item_plus)
+            api_json = json_parser(searched_and_scraped)
     if SCENE_TITLE and api_json is None:
         log.debug("[API] Searching using STASH_TITLE")
         api_search = api_search_req("query", SCENE_TITLE, api_url)
