@@ -232,6 +232,9 @@ def api_search_req(type_search, query, url):
             api_search = [api_request_json["map"]]
         if api_search:
             # TODO: add each "scene" of the game
+            log.debug("api_search:")
+            for item in api_search:
+                log.debug(item)
             # determine scenes from HTML page
 
 
@@ -788,11 +791,11 @@ if "movie" not in sys.argv and "gallery" not in sys.argv:
     url_domain = None
     scraped = None
     game_description = None
+    scraped = scrape_game_html(SCENE_URL, HEADERS)
+    log.debug(f"scraped: {scraped}")
     if SCENE_URL:
         url_id = get_id_from_url(SCENE_URL)
         try:
-            scraped = scrape_game_html(SCENE_URL, HEADERS)
-            log.debug(f"scraped: {scraped}")
             game_title = scraped["title"]
             log.info(f"game_title: {game_title}")
             game_description = scraped["description"]
