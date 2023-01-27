@@ -5,35 +5,32 @@ sceneByURL:
       - lifeselector.com/game/DisplayPlayer/gameId/
     script:
       - python
-      - LifeSelector.py
-      - lifeselector
+      - life_selector.py
+      - sceneByURL
 sceneByFragment:
     action: script
     script:
       - python
-      - LifeSelector.py
-      - lifeselector
+      - life_selector.py
+      - sceneByFragment
 sceneByName:
     action: script
     script:
       - python
-      - LifeSelector.py
-      - lifeselector
-      - searchName
+      - life_selector.py
+      - sceneByName
 sceneByQueryFragment:
     action: script
     script:
       - python
-      - LifeSelector.py
-      - lifeselector
-      - validName
+      - life_selector.py
+      - sceneByQueryFragment
 galleryByURL:
   - action: script
     url:
       - lifeselector.com/pov-photo-gallery/
     script:
       - python
-      - LifeSelector.py
-      - lifeselector
-      - gallery
+      - life_selector.py
+      - galleryByURL
 # Last Updated January 25, 2023
