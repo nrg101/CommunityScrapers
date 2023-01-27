@@ -159,7 +159,7 @@ class LifeSelectorScraper:
             ' - Interactive Porn Game',
             ''
         )
-        self.scraped["description"] = \
+        self.scraped["details"] = \
             page.find("div", class_="info").find("p").string
         self.scraped["scenes"] = [
             {"image": tag['src']} for tag in
@@ -546,7 +546,7 @@ class LifeSelectorScraper:
         # Date
         scrape['date'] = scene_json.get('releaseDate')
         # Details
-        scrape['details'] = self.clean_text(scene_json.get('description'))
+        scrape['details'] = self.clean_text(scene_json.get('details'))
 
         # Studio Code
         if scene_json.get('id'):
@@ -741,7 +741,7 @@ class LifeSelectorScraper:
             self.scraped = self.scrape_game_html(self.scene_url, self.headers)
             log.debug(f"scraped: {self.scraped}")
             self.game_title = self.scraped.get("title")
-            self.game_description = self.scraped.get("description")
+            self.game_description = self.scraped.get("details")
         except Exception as ex:
             log.warning("Can't get game info from URL")
             log.debug(ex)
@@ -776,13 +776,13 @@ class LifeSelectorScraper:
             scraped_json.pop("tags")
         scraped_json["url"] = self.get_game_url_for_id(scene["id"])
         if self.game_description:
-            scraped_json["description"] = self.game_description
+            scraped_json["details"] = self.game_description
         # scrape game page for scenes
         self.scraped = self.scrape_game_html(scraped_json["url"], self.headers)
         for scraped_scene in self.scraped["scenes"]:
             scene_plus = scraped_json.copy()
-            if self.game_description:
-                scene_plus["description"] = self.game_description
+            # if self.game_description:
+            #     scene_plus["details"] = self.game_description
             scene_plus["image"] = scraped_scene["image"]
             parsed_and_scraped_scenes.append(scene_plus)
         return parsed_and_scraped_scenes
@@ -846,7 +846,7 @@ class LifeSelectorScraper:
             for scene in self.scraped["scenes"]:
                 search_item_plus = search_item.copy()
                 if self.game_description:
-                    search_item_plus["description"] = \
+                    search_item_plus["details"] = \
                         self.game_description
                 search_item_plus["image"] = scene["image"]
                 searched_and_scraped.append(search_item_plus)
@@ -857,7 +857,7 @@ class LifeSelectorScraper:
         Start processing
         """
 
-        log.info(f"Starting processing: {self.action}")
+        log.info(f"Starting processing: {self.action.name}")
 
         if "movie" not in sys.argv and "gallery" not in sys.argv:
             # Get your sqlite database
