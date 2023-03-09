@@ -3,12 +3,12 @@ This is a scraper for lifeselector.com and 21roles.com
 """
 import datetime
 import difflib
-from enum import Enum
 import json
 import os
 import re
 import sqlite3
 import sys
+from typing import List
 from configparser import ConfigParser, NoSectionError
 from urllib.parse import urlparse
 
@@ -32,13 +32,6 @@ except ModuleNotFoundError:
         file=sys.stderr)
     sys.exit(1)
 
-Action = Enum('Action', [
-    'sceneByURL',
-    'sceneByFragment',
-    'sceneByName',
-    'sceneByQueryFragment',
-    'galleryByURL'
-])
 
 class LifeSelectorScraper:
     """
@@ -48,18 +41,19 @@ class LifeSelectorScraper:
     action = None
     api_search_results = None
     api_url = "https://contentworker.ls-tester.com/api/search"
+    args = {}
     config_path = None
     database_dict = None
     db_path = None
     fixed_tag = "Male POV"      # Extra tag that will be added to the scene
+    fragment = {}
     game_by_id_url = "https://lifeselector.com/game/DisplayPlayer/gameId"
     game_description = None
+    game_id = None
     game_title = None
+    game_url = None
     headers = None
     search_title = None
-    scene_id = None
-    scene_title = None
-    scene_url = None
     site = None
     url_domain = None
     url_id = None
@@ -146,9 +140,22 @@ class LifeSelectorScraper:
         log.warning(f"[REQUEST] Error, Status Code: {response.status_code}")
         return None
 
-    def scrape_game_html(self, url: str, head: dict) -> dict:
+    def scrape_game_page_html(self, url: str, head: dict) -> None:
         """
         scrape a game's HTML page
+
+        saves:
+        {
+            "scraped": {
+                "title": "<game/release title>",
+                "details": "<game/release description>",
+                "scenes": [
+                    {
+                        "image": "<individual scene image url>"
+                    }
+                ]
+            }
+        }
         """
         self.scraped = {}
         log.info(f"Scraping HTML page {url}")
@@ -168,7 +175,6 @@ class LifeSelectorScraper:
 
         log.debug(f"scraped: {self.scraped}")
         log.info(f"Found {len(self.scraped['scenes'])} scenes in this game")
-        return self.scraped
 
     def fetch_page_json(self, page_html):
         matches = re.findall(r'window.env\s+=\s(.+);', page_html, re.MULTILINE)
@@ -205,18 +211,6 @@ class LifeSelectorScraper:
     def api_search_id(self, scene_id, url):
         search_url = f"{url}/{scene_id}/choiceId/0"
         req = self.send_request(search_url, self.headers)
-        return req
-
-    def api_search_movie_id(self, m_id, url):
-        movie_id = [f"movie_id:{m_id}"]
-        request_api = {
-            "requests": [{
-                "indexName": "all_movies",
-                "params": "query=&hitsPerPage=20&page=0",
-                "facetFilters": movie_id
-            }]
-        }
-        req = self.send_request(url, self.headers, request_api)
         return req
 
     def api_search_gallery_id(self, p_id, url):
@@ -409,10 +403,10 @@ class LifeSelectorScraper:
         #             match_domain = True
 
         # Matching ratio
-        if self.scene_title:
+        if self.game_title:
             match_ratio_title = \
                 difflib.SequenceMatcher(
-                    None, self.scene_title.lower(), api_title.lower()
+                    None, self.game_title.lower(), api_title.lower()
                 ).ratio()
         else:
             match_ratio_title = 0
@@ -531,49 +525,76 @@ class LifeSelectorScraper:
                 directors.append(director.get('name').strip())
         scrape["director"] = ", ".join(directors)
         return scrape
-
-    def parse_scene_json(self, scene_json, url=None):
+    
+    def nice_join_list_str(self, str_list: List[str]) -> str:
         """
-        process an api scene dictionary and return a scraped one
+        Joins a list of strings like:
+        ['One'] -> 'One'
+        ['One', 'Two'] -> 'One & Two'
+        ['One', 'Two', 'Three'] -> 'One, Two & Three'
         """
-        # log.debug(
-        #     f"Parsing scene json. scene_json: {scene_json}, url: {url}"
-        # )
-        scrape = {}
-        # Title
-        if scene_json.get('title'):
-            scrape['title'] = scene_json['title'].strip()
-        # Date
-        scrape['date'] = scene_json.get('releaseDate')
-        # Details
-        scrape['details'] = self.clean_text(scene_json.get('details'))
+        nice_str = ""
+        if len(str_list) == 1:
+            nice_str = str_list[0]
+        else:
+            csv = ', '.join(str_list[slice(len(str_list) - 1)])
+            last = str_list[-1]
+            nice_str = f"{csv} & {last}"
+        return nice_str
 
-        # Studio Code
-        if scene_json.get('id'):
-            scrape['code'] = str(scene_json['id'])
-
-        # Director
-        directors = []
-        if scene_json.get('directors') is not None:
-            for director in scene_json.get('directors'):
-                directors.append(director.get('name').strip())
-        scrape["director"] = ", ".join(directors)
-
-        # Studio
-        # scrape['studio']['name'] = scene_json.get('serie_name')
-
+    def parse_game_json(self, game_json, url=None) -> List[dict]:
+        """
+        process an api game dictionary and return an individual
+        scraped scene from the game/release
+        """
+        log.debug(
+            f"start parse_game_json(game_json={game_json}, url=\"{url}\")"
+        )
+        game_scraped = {}
+        
         # Performer
-        perf = []
-        for actor in scene_json.get('performer'):
-            perf.append({
+        performers = []
+        for actor in game_json.get('performer'):
+            performers.append({
                 "name": actor.get('name').strip(),
                 "gender": "female"
             })
-        scrape['performers'] = perf
+        game_scraped['performers'] = performers
+
+        # Title
+        if game_json.get('title'):
+            game_scraped['title'] = game_json['title'].strip()
+        if len(performers) > 0:
+            performer_names = [ p['name'] for p in performers ]
+            game_scraped['title'] += f" - {self.nice_join_list_str(performer_names)}"
+
+        # Date
+        game_scraped['date'] = game_json.get('releaseDate')
+        # Details
+        game_scraped['details'] = self.clean_text(game_json.get('details'))
+
+        # Studio Code
+        if game_json.get('id'):
+            game_scraped['code'] = game_json['id']
+
+        # Director
+        directors = []
+        if game_json.get('directors') is not None:
+            for director in game_json.get('directors'):
+                directors.append(director.get('name').strip())
+        game_scraped["director"] = ", ".join(directors)
+
+        # Studio
+        if self.url_domain:
+            game_scraped['studio'] = {}
+            if self.url_domain == 'lifeselector':
+                game_scraped['studio']['name'] = 'Life Selector'
+            elif self.url_domain == "21roles":
+                game_scraped['studio']['name'] = '21 Roles'
 
         # Tags
         list_tag = []
-        for tag in scene_json.get('tag'):
+        for tag in game_json.get('tag'):
             if tag.get('name') is None:
                 continue
             tag_name = tag.get('name')
@@ -584,44 +605,59 @@ class LifeSelectorScraper:
                 list_tag.append({"name": tag.get('name')})
         if self.fixed_tag:
             list_tag.append({"name": self.fixed_tag})
-        scrape['tags'] = list_tag
+        game_scraped['tags'] = list_tag
 
-        # Image
-        try:
-            scene_id = scene_json["id"]
-            scrape['image'] = \
-                f"https://i.c7cdn.com/generator/games/{scene_id}" \
-                "/images/poster/2_size2000.jpg"
-        except Exception as ex:
-            log.debug(ex)
-            log.warning("Can't locate image.")
         # URL
         try:
-            hostname = scene_json['sitename']
+            hostname = game_json['sitename']
             # Movie
-            if scene_json.get('movie_title'):
-                scrape['movies'] = [{
-                    "name": scene_json["movie_title"],
-                    "synopsis": self.clean_text(scene_json.get("movie_desc")),
-                    "date": scene_json.get("movie_date_created")
+            if game_json.get('movie_title'):
+                game_scraped['movies'] = [{
+                    "name": game_json["movie_title"],
+                    "synopsis": self.clean_text(game_json.get("movie_desc")),
+                    "date": game_json.get("movie_date_created")
                     }]
                 log.debug(f"domain to use for movie url: {self.url_domain}")
 
-            net_name = scene_json['network_name']
+            net_name = game_json['network_name']
             if net_name.lower() == "21 sextury":
                 hostname = "21sextury"
             elif net_name.lower() == "21 naturals":
                 hostname = "21naturals"
-            scrape['url'] = \
+            game_scraped['url'] = \
                 f"https://{hostname.lower()}.com/en/video" \
-                f"/{scene_json['sitename'].lower()}" \
-                f"/{scene_json['url_title']}/{scene_json['clip_id']}"
+                f"/{game_json['sitename'].lower()}" \
+                f"/{game_json['url_title']}/{game_json['clip_id']}"
         except Exception as ex:
             log.debug(ex)
             if url:
-                scrape['url'] = url
+                game_scraped['url'] = url
         # debug(f"{scrape}")
-        return scrape
+
+        # # Image
+        # try:
+        #     scene_id = game_json["id"]
+        #     game_scraped['image'] = \
+        #         f"https://i.c7cdn.com/generator/games/{scene_id}" \
+        #         f"/images/poster/{scene_number}_size2000.jpg"
+        # except Exception as ex:
+        #     log.debug(ex)
+        #     log.warning("Can't locate image.")
+        scenes = [
+            {
+                'performers': game_scraped.get('performers'),
+                'title': f"{game_scraped.get('title')} (DELETE AS APPROPRIATE!)",
+                'date': game_scraped.get('date'),
+                'details': game_scraped.get('details'),
+                'code': game_scraped.get('code'),
+                'director': game_scraped.get('director'),
+                'studio': game_scraped.get('studio').get('name') if game_scraped.get('studio') else None,
+                'tags': game_scraped.get('tags'),
+                'url': game_scraped.get('url'),
+                'image': scene.get('image')
+            } for scene in self.scraped['scenes']
+        ]
+        return scenes
 
     def parse_gallery_json(self, gallery_json: dict, url: str = None) -> dict:
         """
@@ -712,11 +748,11 @@ class LifeSelectorScraper:
                             break
         log.debug(f"Database Path: {self.db_path}")
 
-    def get_scene_dict_from_db(self):
+    def get_scene_dict_from_db(self, game_id=None):
         if self.db_path:
-            if self.scene_id:
+            if game_id:
                 # Get data by GraphQL
-                self.database_dict = graphql.getScene(self.scene_id)
+                self.database_dict = graphql.getScene(game_id)
                 if self.database_dict is None:
                     # Get data by SQlite
                     log.warning(
@@ -724,7 +760,7 @@ class LifeSelectorScraper:
                         "directly..."
                     )
                     self.database_dict = \
-                        self.check_db(self.db_path, self.scene_id)
+                        self.check_db(self.db_path, game_id)
                 else:
                     self.database_dict = self.database_dict["file"]
                 log.debug(f"[DATABASE] Info: {self.database_dict}")
@@ -736,106 +772,105 @@ class LifeSelectorScraper:
             log.warning("Database path missing.")
 
     def scrape_scene_url(self):
-        self.url_id = self.get_id_from_url(self.scene_url)
+        self.url_id = self.get_id_from_url(self.fragment.get("url"))
         try:
-            self.scraped = self.scrape_game_html(self.scene_url, self.headers)
-            log.debug(f"scraped: {self.scraped}")
-            self.game_title = self.scraped.get("title")
-            self.game_description = self.scraped.get("details")
+            self.scrape_game_page_html(self.fragment.get("url"), self.headers)
         except Exception as ex:
             log.warning("Can't get game info from URL")
             log.debug(ex)
 
-    def clean_scene_title(self):
+    def clean_scene_title(self, title) -> str:
         # Remove some punctuation/symbols and file extension, if present
-        self.scene_title = re.sub(
+        log.debug(f"clean_scene_title title (input): {title}")
+        title = re.sub(
             r'[-._\']',
             ' ',
-            os.path.splitext(self.scene_title)[0]
+            os.path.splitext(title)[0]
         )
         # Remove resolution
-        self.scene_title = re.sub(
+        title = re.sub(
             r'\sXXX|\s1080p|720p|2160p|KTR|RARBG|\scom\s|\[|]|\sHD|\sSD|', '',
-            self.scene_title)
+            title)
         # Remove Date
-        self.scene_title = re.sub(
+        title = re.sub(
             r'\s\d{2}\s\d{2}\s\d{2}|\s\d{4}\s\d{2}\s\d{2}',
             '',
-            self.scene_title
+            title
         )
-        log.debug(f"Title: {self.scene_title}")
+        log.debug(f"clean_scene_title title (output): {title}")
+        return title
 
     def get_game_url_for_id(self, game_id):
         return f"{self.game_by_id_url}/{game_id}"
 
-    def parse_and_scrape_scene(self, scene):
-        parsed_and_scraped_scenes = []
-        log.debug(f"scene: {scene}")
-        scraped_json = self.parse_scene_json(scene)
+    def parse_and_scrape_game(self, game):
+        scenes = []
+        log.debug("start parse_and_scrape_game(game)")
+        scraped_json = self.parse_game_json(game)
         if scraped_json.get("tags"):
             scraped_json.pop("tags")
-        scraped_json["url"] = self.get_game_url_for_id(scene["id"])
+        scraped_json["url"] = self.get_game_url_for_id(game["id"])
         if self.game_description:
             scraped_json["details"] = self.game_description
         # scrape game page for scenes
-        self.scraped = self.scrape_game_html(scraped_json["url"], self.headers)
+        self.scrape_game_page_html(scraped_json["url"], self.headers)
         for scraped_scene in self.scraped["scenes"]:
             scene_plus = scraped_json.copy()
             # if self.game_description:
             #     scene_plus["details"] = self.game_description
             scene_plus["image"] = scraped_scene["image"]
-            parsed_and_scraped_scenes.append(scene_plus)
-        return parsed_and_scraped_scenes
+            scenes.append(scene_plus)
+        log.debug("end parse_and_scrape_game(game)")
+        return scenes
 
-    def scene_by_name(self):
-        self.search_title = self.search_title.replace(".", " ")
-        log.debug(f"[API] Searching for: {self.search_title}")
+    def game_by_name(self, name) -> list:
+        '''
+        Search for game by name, returns a list of game results
+        '''
+        log.debug("start game_by_name(name)")
+        # clean name to be search title
+        self.clean_scene_title(name)
+
+        log.debug(f"[API] Searching for: {name}")
         self.api_search_results = \
-            self.api_search_req("query", self.search_title, self.api_url)
+            self.api_search_req("query", name, self.api_url)
         final_json = None
         if self.api_search_results:
             result_search = []
-            log.debug(
-                f"sceneByName, api_search_results: {self.api_search_results}"
-            )
-            for scene in self.api_search_results:
-                parsed_and_scraped_scenes = self.parse_and_scrape_scene(scene)
-                result_search.extend(parsed_and_scraped_scenes)
+            for game in self.api_search_results:
+                scenes = self.parse_and_scrape_game(game)
+                result_search.extend(scenes)
             if result_search:
                 final_json = result_search
         if final_json is None:
             log.error("API Search finished. No results!")
+        else:
+            log.debug(f"final_json: {final_json}")
+        log.debug("end game_by_name(name)")
         return final_json
 
-    def load_from_input(self):
+    def load_from_input(self) -> None:
         """
         get fragment from stdin (stashapp submits JSON to stdin into the
         script)
         """
-        fragment = json.loads(input())
-        log.debug(f"fragment: {fragment}")
-        self.search_title = fragment.get("name")
-        self.scene_id = fragment.get("id")
-        self.scene_title = fragment.get("title")
-        self.scene_url = fragment.get("url")
+        log.debug("start load_from_input()")
+        self.fragment = json.loads(input())
+        log.debug(f"fragment: {self.fragment}")
 
-        if self.scene_url:
+        if self.fragment.get("url"):
             self.url_domain = re.sub(
                 r"www\.|\.com", "",
-                urlparse(self.scene_url).netloc
+                urlparse(self.fragment.get("url")).netloc
             ).lower()
             log.info(f"URL Domain: {self.url_domain}")
 
-        if self.action == Action.sceneByQueryFragment \
-                and self.scene_url is None:
-            log.error("scene_url is required for `sceneByQueryFragment`")
-            sys.exit(1)
-
-        if self.scene_url and self.scene_id is None:
-            log.debug(f"URL Scraping: {self.scene_url}")
+        if self.fragment.get("url") and self.fragment.get("id") is None:
+            log.debug(f"URL Scraping: {self.fragment.get('url')}")
         else:
-            log.debug(f"Stash ID: {self.scene_id}")
-            log.debug(f"Stash Title: {self.scene_title}")
+            log.debug(f"Stash ID: {self.fragment.get('id')}")
+            log.debug(f"Stash Title: {self.fragment.get('title')}")
+        log.debug("end load_from_input()")
 
     def add_html_scrapings(self):
         """
@@ -857,29 +892,46 @@ class LifeSelectorScraper:
         Start processing
         """
 
-        log.info(f"Starting processing: {self.action.name}")
+        log.info("start start_processing()")
 
-        if "movie" not in sys.argv and "gallery" not in sys.argv:
-            # Get your sqlite database
-            self.get_db_path()
-            self.get_scene_dict_from_db()
+        if self.args.get('action') == 'sceneByFragment' \
+                or self.args.get('action') == 'sceneByQueryFragment':
+            if self.fragment.get('url') is None:
+                log.error("scene_url is required for `sceneByQueryFragment`")
+                sys.exit(1)
+            self.scrape_scene_url()
+            scene_search_by_name_results = self.game_by_name(self.scraped.get('title'))
+            idx = int(self.fragment.get('code').split('-')[1])
+            print(json.dumps(scene_search_by_name_results[idx]))
+        if self.args.get('action') == 'sceneByName':
+            # fragment = {"name": "<scene query string>"}
+            self.scrape_scene_url()
+            scene_search_by_name_results = self.game_by_name(self.fragment.get('name'))
+            print(json.dumps(scene_search_by_name_results))
+        elif self.args.get('action') == 'sceneByURL':
+            # fragment = {"url": "<url>"}
+            self.scrape_scene_url()
 
-            # Extract things from URL page
-            if self.scene_url:
-                self.scrape_scene_url()
 
-            # Filter title
-            if self.scene_title:
-                self.clean_scene_title()
 
-            # Time to search the API
-            self.api_search_results = None
-            api_json = None
+        # if self.args.get('action') and self.args.get('action').startswith('scene'):
+        #     # Get your sqlite database
+        #     self.get_db_path()
+        #     self.get_scene_dict_from_db(self.fragment.get('id'))
 
-            # sceneByName
-            if self.search_title:
-                print(json.dumps(self.scene_by_name()))
-                sys.exit()
+            # # Extract things from URL page
+            # if self.game_url:
+            #     self.scrape_scene_url()
+
+            # # Filter title
+            # if self.fragment.get("title"):
+            #     self.clean_scene_title(self.fragment.get("title"))
+
+            # # Time to search the API
+            # self.api_search_results = None
+            # api_json = None
+
+
 
             # if self.URL_ID:
             #     log.debug(f"[API] Searching using URL_ID {self.URL_ID}")
@@ -893,62 +945,53 @@ class LifeSelectorScraper:
             #         api_json = json_parser(self.api_search_results, 120, True)
             #     else:
             #         log.warning("[API] No result")
-            if self.game_title and api_json is None:
-                log.debug("[API] Searching using game_title")
-                self.api_search_results = \
-                    self.api_search_req("query", self.game_title, self.api_url)
-                if self.api_search_results:
-                    searched_and_scraped = self.add_html_scrapings()
-                    api_json = self.json_parser(searched_and_scraped)
-            if self.scene_title and api_json is None:
-                log.debug("[API] Searching using scene_title")
-                self.api_search_results = \
-                    self.api_search_req(
-                        "query", self.scene_title, self.api_url
-                    )
-                if self.api_search_results:
-                    searched_and_scraped = self.add_html_scrapings()
-                    api_json = self.json_parser(searched_and_scraped)
+        #     if self.fragment.get("title") and api_json is None:
+        #         log.debug("[API] Searching using game_title")
+        #         self.api_search_results = \
+        #             self.api_search_req("query", self.fragment.get("title"), self.api_url)
+        #         if self.api_search_results:
+        #             searched_and_scraped = self.add_html_scrapings()
+        #             api_json = self.json_parser(searched_and_scraped)
+        #     if self.fragment.get("title") and api_json is None:
+        #         log.debug("[API] Searching using scene_title")
+        #         self.api_search_results = \
+        #             self.api_search_req(
+        #                 "query", self.fragment.get("title"), self.api_url
+        #             )
+        #         if self.api_search_results:
+        #             searched_and_scraped = self.add_html_scrapings()
+        #             api_json = self.json_parser(searched_and_scraped)
 
-            # Scraping the JSON
-            if api_json:
-                log.info(f"Scene found: {api_json['title']}")
-                scraped_json = self.parse_scene_json(api_json, self.scene_url)
-                print(json.dumps(scraped_json))
-            else:
-                log.error("Can't find the scene")
-                print(json.dumps({}))
-                sys.exit()
-        elif "movie" in sys.argv:
-            log.debug("Scraping movie")
-            movie_id = self.get_id_from_url(self.scene_url)
-            if movie_id:
-                movie_results = \
-                    self.api_search_movie_id(movie_id, self.api_url)
-                movie = movie_results.json()["results"][0].get("hits")
-                scraped_movie = self.parse_movie_json(movie)
-                # log.debug(scraped_movie)
-                print(json.dumps(scraped_movie))
-        elif "gallery" in sys.argv:
-            log.debug("Scraping gallery")
-            gallery_id = self.get_id_from_url(self.scene_url)
-            if gallery_id:
-                gallery_results = \
-                    self.api_search_gallery_id(gallery_id, self.api_url)
-                gallery = gallery_results.json()["results"][0].get("hits")
-                if gallery:
-                    # log.debug(gallery[0])
-                    scraped_gallery = self.parse_gallery_json(gallery[0])
-                    # log.debug(scraped_gallery)
-                    print(json.dumps(scraped_gallery))
+        #     # Scraping the JSON
+        #     if api_json:
+        #         log.info(f"Scene found: {api_json['title']}")
+        #         scraped_json = self.parse_scene_json(api_json, self.game_url)
+        #         print(json.dumps(scraped_json))
+        #     else:
+        #         log.error("Can't find the scene")
+        #         print(json.dumps({}))
+        #         sys.exit()
+        # elif self.action == 'galleryByURL':
+        #     log.debug("Scraping gallery")
+        #     gallery_id = self.get_id_from_url(self.game_url)
+        #     if gallery_id:
+        #         gallery_results = \
+        #             self.api_search_gallery_id(gallery_id, self.api_url)
+        #         gallery = gallery_results.json()["results"][0].get("hits")
+        #         if gallery:
+        #             # log.debug(gallery[0])
+        #             scraped_gallery = self.parse_gallery_json(gallery[0])
+        #             # log.debug(scraped_gallery)
+        #             print(json.dumps(scraped_gallery))
 
-    def load_arguments(self):
+    def load_arguments(self) -> None:
         """
         get the script arguments from sys.argv
         """
+        log.debug("start load_arguments()")
+        self.args = {}
         try:
-            action_argument = sys.argv[1]
-            self.action = Action[action_argument]
+            self.args['action'] = sys.argv[1]
         except IndexError as ex:
             log.debug(ex)
             log.error(
@@ -956,12 +999,8 @@ class LifeSelectorScraper:
                 "(third array item of script property in YAML)"
             )
             sys.exit(1)
-        except KeyError as ex:
-            log.debug(ex)
-            log.error(
-                f"requested action {action_argument} is not implemented"
-            )
-            sys.exit(1)
+        log.debug(f"args: {self.args}")
+        log.debug("end load_arguments()")
 
 
 if __name__ == '__main__':

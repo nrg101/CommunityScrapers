@@ -107,9 +107,9 @@ class TestLifeSelectorScraper(unittest.TestCase):
 
         # then
         self.assertEqual(scraper.search_title, "Billy Bob")
-        self.assertEqual(scraper.scene_id, "123456")
-        self.assertEqual(scraper.scene_title, "Bob of the Billies")
-        self.assertEqual(scraper.scene_url, "http://bob")
+        self.assertEqual(scraper.game_id, "123456")
+        self.assertEqual(scraper.game_title, "Bob of the Billies")
+        self.assertEqual(scraper.game_url, "http://bob")
 
     def test_get_db_path_no_response(self):
         """
