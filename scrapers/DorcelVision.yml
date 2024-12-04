@@ -1,10 +1,10 @@
+# yaml-language-server: $schema=../validator/scraper.schema.json
 name: DorcelVision
 sceneByURL:
   - action: scrapeXPath
     url:
       - https://www.dorcelvision.com/en/movies
-    scraper: sceneScraper
-
+    scraper: movieScraper
 movieByURL:
   - action: scrapeXPath
     url:
@@ -17,7 +17,7 @@ sceneByName:
 sceneByQueryFragment:
   action: scrapeXPath
   queryURL: "{url}"
-  scraper: sceneScraper
+  scraper: movieScraper
 
 
 xPathScrapers:
@@ -40,9 +40,7 @@ xPathScrapers:
               - regex: (.*)
                 with: https://www.dorcelvision.com$1
       Details: $card/details//p[last()]
-        
-        
-  sceneScraper:
+  movieScraper:
     scene:
       Title: &titleSel //meta[@property="og:title"]/@content
       Details: &detailsAttr
@@ -50,10 +48,11 @@ xPathScrapers:
         concat: "\n\n"
       Image: &imageAttr
         selector: //a[contains(@class, "cover")]/@href
-        postProcess:
+        postProcess: &prependBaseURL
           - replace:
               - regex: (.*)
                 with: https://dorcelvision.com$1
+      Director: &directorSel //div[strong[contains(text(), "Directed by")]]//following-sibling::div/a/text()
       Date: &dateAttr
         selector: //div[@class="row informations"]/div/div/strong[contains(., "Production year")]/parent::div/following-sibling::div
         postProcess:
@@ -69,20 +68,25 @@ xPathScrapers:
         Name: //meta[@property="og:title"]/@content
         URL: //meta[@property="og:url"]/@content
       URL: //meta[@property="og:url"]/@content
-  movieScraper:
     movie:
       Name: *titleSel
       Date: *dateAttr
       Duration:
-        selector: //div[@class="informations"]//span[@class="duration"]/text()
+        selector: //div[strong[contains(text(), "Duration")]]//following-sibling::div/span/text()
         postProcess:
           - replace:
-              - regex: \smin
+              - regex: \smin\.?
                 with: ":00"
       Studio: *studioAttr
-      Director:
-        selector: //div[@class="informations"]//strong[contains(., "Directed by")]/following-sibling::a/text()
+      Director: *directorSel
       FrontImage: *imageAttr
+      BackImage:
+        selector: //a[contains(@class, "back")]/@href
+        postProcess: *prependBaseURL
       Synopsis: *detailsAttr
 # Reference: https://github.com/PAhelper/PhoenixAdult.bundle/blob/master/Contents/Code/siteDorcelVision.py
-# Last Updated December 13, 2023
+driver:
+  headers:
+    - Key: User-Agent
+      Value: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+# Last Updated December 3, 2024
