@@ -1,0 +1,100 @@
+# requires: AlgoliaAPI
+name: a-XEmpire
+sceneByURL:
+  - action: script
+    url:
+      - allblackx.com/en/video/
+      - darkx.com/en/video/
+      - eroticax.com/en/video/
+      - hardx.com/en/video/
+      - lesbianx.com/en/video/
+      - xempire.com/en/video/
+    script:
+      - python
+      - XEmpire.py
+      - xempire
+      - scene-by-url
+sceneByFragment:
+  action: script
+  script:
+    - python
+    - XEmpire.py
+    - xempire
+    - scene-by-fragment
+sceneByName:
+  action: script
+  script:
+    - python
+    - XEmpire.py
+    - xempire
+    - scene-by-name
+sceneByQueryFragment:
+  action: script
+  script:
+    - python
+    - XEmpire.py
+    - xempire
+    - scene-by-query-fragment
+movieByURL:
+  - action: script
+    url:
+      - allblackx.com/en/movie/
+      - darkx.com/en/movie/
+      - eroticax.com/en/movie/
+      - hardx.com/en/movie/
+      - lesbianx.com/en/movie/
+      - xempire.com/en/movie/
+    script:
+      - python
+      - XEmpire.py
+      - xempire
+      - movie-by-url
+galleryByFragment:
+  action: script
+  script:
+    - python
+    - XEmpire.py
+    - xempire
+    - gallery-by-fragment
+galleryByURL:
+  - action: script
+    url:
+      - allblackx.com/en/photo/
+      - darkx.com/en/photo/
+      - eroticax.com/en/photo/
+      - hardx.com/en/photo/
+      - lesbianx.com/en/photo/
+      - xempire.com/en/photo/
+    script:
+      - python
+      - XEmpire.py
+      - xempire
+      - gallery-by-url
+performerByURL:
+  - action: script
+    url:
+      - allblackx.com/en/pornstar/
+      - darkx.com/en/pornstar/
+      - eroticax.com/en/pornstar/
+      - hardx.com/en/pornstar/
+      - lesbianx.com/en/pornstar/
+      - xempire.com/en/pornstar/
+    script:
+      - python
+      - XEmpire.py
+      - performer-by-url
+performerByName:
+  action: script
+  script:
+    - python
+    - XEmpire.py
+    - xempire
+    - performer-by-name
+performerByFragment:
+  action: script
+  script:
+    - python
+    - XEmpire.py
+    - xempire
+    - performer-by-fragment
+# Last Updated January 30, 2025
