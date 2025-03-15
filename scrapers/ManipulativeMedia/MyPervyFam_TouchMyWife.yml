@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=../../validator/scraper.schema.json
+# requires: AlgoliaAPI
+name: ManipulativeMedia
+sceneByURL:
+  - action: script
+    url:
+      - mypervyfamily.com/en/video
+      - touchmywife.com/en/video
+    script:
+      - python
+      - MyPervyFam_TouchMyWife.py
+      - mypervyfamily
+      - scene-by-url
+sceneByFragment:
+  action: script
+  script:
+    - python
+    - MyPervyFam_TouchMyWife.py
+    - mypervyfamily
+    - scene-by-fragment
+sceneByName:
+  action: script
+  script:
+    - python
+    - MyPervyFam_TouchMyWife.py
+    - mypervyfamily
+    - scene-by-name
+sceneByQueryFragment:
+  action: script
+  script:
+    - python
+    - MyPervyFam_TouchMyWife.py
+    - mypervyfamily
+    - scene-by-query-fragment
+galleryByURL:
+  - action: script
+    url:
+      - mypervyfamily.com/en/photo/
+      - touchmywife.com/en/photo/
+    script:
+      - python
+      - MyPervyFam_TouchMyWife.py
+      - mypervyfamily
+      - gallery-by-url
+# Last Updated March 14, 2025
