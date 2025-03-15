@@ -109,7 +109,14 @@ def clean_text(details: str) -> str:
     if details:
         details = details.replace("\\", "")
         details = re.sub(r"<\s*\/?br\s*\/?\s*>", "\n", details)
-        details = bs(details, features='html.parser').get_text("\n", strip=True)
+        details = bs(details, features="html.parser").get_text()
+        details = "\n".join(
+            [
+                " ".join([s for s in x.strip(" ").split(" ") if s != ""])
+                for x in "".join(details.replace("\r\n", "\n")).split("\n")
+            ]
+        )
+        details = details.strip()
     return details
 
 def get_search_client(site: str) -> SearchClientSync:
@@ -669,25 +676,25 @@ def scene_search(
     postprocess: Callable[[ScrapedScene, dict], ScrapedScene] = default_postprocess,
 ) -> list[ScrapedScene]:
     "Searches the API for scenes with a text query"
-    site = sites[0] # TODO: handle multiple sites?
-    response = get_search_client(site).search_single_index(
-        index_name="all_scenes",
-        search_params={
-            "attributesToHighlight": [],
-            "query": query,
-            "length": 20,
-        },
-    )
-    log.debug(f"Number of search hits: {response.nb_hits}")
-    if response.nb_hits:
-        if len(api_scenes := [hit.to_dict() for hit in response.hits]) == 1: # single search result
-            return [postprocess(to_scraped_scene(api_scenes[0], site), api_scenes[0])]
-        if len(api_scenes) > 1: # multiple search results
-            return [
-                postprocess(to_scraped_scene(api_scene, site), api_scene)
-                for api_scene in sort_api_scenes_by_match(api_scenes, fragment) # sort
-            ]
-    return []
+    scenes_list = []
+    for site in sites:
+        response = get_search_client(site).search_single_index(
+            index_name="all_scenes",
+            search_params={
+                "attributesToHighlight": [],
+                "query": query,
+                "length": 20,
+            },
+        )
+        log.debug(f"Number of search hits: {response.nb_hits}")
+        if response.nb_hits:
+            if len(api_scenes := [hit.to_dict() for hit in response.hits]) > 0:
+                scenes_list.extend([
+                    postprocess(to_scraped_scene(api_scene, site), api_scene)
+                    for api_scene in sort_api_scenes_by_match(api_scenes, fragment) # sort
+                ])
+    return scenes_list
+
 
 def add_photoset_match_metadata(
     api_photoset: dict[str, Any],
